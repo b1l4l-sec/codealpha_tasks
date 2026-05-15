@@ -5,6 +5,12 @@ Author: LBIEN Bilal | github.com/b1l4l-sec
 
 ---
 
+## Screenshot
+
+![Network Sniffer Output](screenshot.png)
+
+---
+
 ## Overview
 
 A production-quality Python network packet sniffer built with Scapy.
@@ -39,8 +45,8 @@ Captures, dissects, and displays live network traffic with deep protocol analysi
 
 ## Installation
 
-    git clone https://github.com/b1l4l-sec/CodeAlpha_NetworkSniffer.git
-    cd CodeAlpha_NetworkSniffer
+    git clone https://github.com/b1l4l-sec/CodeAlpha.git
+    cd CodeAlpha/CodeAlpha_NetworkSniffer
     pip3 install -r requirements.txt
 
 ---
@@ -51,7 +57,7 @@ Captures, dissects, and displays live network traffic with deep protocol analysi
     sudo python3 sniffer.py
 
     # Specific interface
-    sudo python3 sniffer.py -i eth0
+    sudo python3 sniffer.py -i enp0s3
 
     # Capture 100 packets then stop
     sudo python3 sniffer.py -c 100
@@ -80,6 +86,7 @@ Captures, dissects, and displays live network traffic with deep protocol analysi
     |-- packet_analyzer.py  # Deep packet dissection (all protocol layers)
     |-- display.py          # Colored terminal output and summary stats
     |-- requirements.txt    # Python dependencies
+    |-- screenshot.png      # Sample output screenshot
     |-- README.md
 
 ---
