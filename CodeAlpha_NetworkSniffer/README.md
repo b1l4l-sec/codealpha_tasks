@@ -7,7 +7,7 @@ Author: LBIEN Bilal | github.com/b1l4l-sec
 
 ## Screenshot
 
-![Network Sniffer Output](screenshot.png)
+![Network Sniffer Output](summary.png)
 
 ---
 
@@ -86,7 +86,7 @@ Captures, dissects, and displays live network traffic with deep protocol analysi
     |-- packet_analyzer.py  # Deep packet dissection (all protocol layers)
     |-- display.py          # Colored terminal output and summary stats
     |-- requirements.txt    # Python dependencies
-    |-- screenshot.png      # Sample output screenshot
+    |-- summary.png      # Sample output screenshot
     |-- README.md
 
 ---
