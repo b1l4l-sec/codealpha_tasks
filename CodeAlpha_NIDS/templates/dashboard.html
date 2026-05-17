@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CodeAlpha NIDS — Threat Intelligence Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #070b0f;
+  --surface:  #0d1117;
+  --surface2: #111820;
+  --border:   #1e2d3d;
+  --border2:  #243447;
+  --accent:   #00d4ff;
+  --accent2:  #0088cc;
+  --green:    #00ff88;
+  --red:      #ff3366;
+  --orange:   #ff8c00;
+  --yellow:   #ffd60a;
+  --purple:   #bd93f9;
+  --text:     #cdd6f4;
+  --muted:    #6c7a8d;
+  --crit:     #ff3366;
+  --high:     #ff8c00;
+  --medium:   #ffd60a;
+  --low:      #00d4ff;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: 'Orbitron', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Animated grid background */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none; z-index: 0;
+  animation: gridShift 20s linear infinite;
+}
+
+@keyframes gridShift {
+  0% { background-position: 0 0; }
+  100% { background-position: 32px 32px; }
+}
+
+/* Scanline */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,212,255,0.008) 3px, rgba(0,212,255,0.008) 4px
+  );
+  pointer-events: none; z-index: 9999;
+}
+
+.app { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── HEADER ──────────────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; height: 48px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-size: 13px; font-weight: 900;
+  color: var(--accent);
+  letter-spacing: 3px;
+  text-shadow: 0 0 20px rgba(0,212,255,0.5);
+  display: flex; align-items: center; gap: 10px;
+}
+
+.logo-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+
+.header-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+.header-right {
+  display: flex; align-items: center; gap: 24px;
+  font-size: 11px; color: var(--muted);
+}
+
+.header-right strong { color: var(--text); font-weight: 500; }
+
+.threat-level {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 12px;
+  border: 1px solid;
+  font-family: var(--font-display);
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.threat-level.none   { border-color: var(--muted);  color: var(--muted);  }
+.threat-level.low    { border-color: var(--low);    color: var(--low);    box-shadow: 0 0 8px rgba(0,212,255,0.2); }
+.threat-level.medium { border-color: var(--medium); color: var(--medium); box-shadow: 0 0 8px rgba(255,214,10,0.2); }
+.threat-level.high   { border-color: var(--high);   color: var(--high);   box-shadow: 0 0 8px rgba(255,140,0,0.3); animation: threatPulse 1s ease-in-out infinite; }
+.threat-level.critical { border-color: var(--crit); color: var(--crit);   box-shadow: 0 0 12px rgba(255,51,102,0.4); animation: threatPulse .6s ease-in-out infinite; }
+
+@keyframes threatPulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+/* ── STAT CARDS ──────────────────────────────────────────────────────── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1px;
+  border-bottom: 1px solid var(--border);
+  background: var(--border);
+}
+
+.stat-card {
+  background: var(--surface);
+  padding: 14px 16px;
+  position: relative; overflow: hidden;
+  transition: background .2s;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--card-color, var(--accent));
+  opacity: 0.6;
+}
+
+.stat-label {
+  font-size: 9px; text-transform: uppercase;
+  letter-spacing: .15em; color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 24px; font-weight: 700;
+  color: var(--card-color, var(--accent));
+  line-height: 1;
+  text-shadow: 0 0 20px var(--card-color, var(--accent));
+}
+
+.stat-sub { font-size: 9px; color: var(--muted); margin-top: 4px; }
+
+.stat-card.total   { --card-color: var(--accent); }
+.stat-card.crit    { --card-color: var(--crit); }
+.stat-card.high    { --card-color: var(--high); }
+.stat-card.medium  { --card-color: var(--medium); }
+.stat-card.low-c   { --card-color: var(--low); }
+.stat-card.packets { --card-color: var(--green); }
+
+/* ── MAIN GRID ───────────────────────────────────────────────────────── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto 1fr;
+  gap: 1px;
+  background: var(--border);
+  flex: 1;
+}
+
+.panel {
+  background: var(--surface);
+  padding: 16px;
+  overflow: hidden;
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 9px; font-weight: 700;
+  letter-spacing: .2em; text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.panel-title::before {
+  content: '';
+  display: inline-block; width: 3px; height: 12px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* ── CHARTS ROW ──────────────────────────────────────────────────────── */
+.charts-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-panel {
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+canvas { max-height: 160px; }
+
+/* ── ALERT TABLE ─────────────────────────────────────────────────────── */
+.alerts-panel {
+  background: var(--surface);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+.table-wrap { overflow-y: auto; flex: 1; }
+.table-wrap::-webkit-scrollbar { width: 3px; }
+.table-wrap::-webkit-scrollbar-track { background: transparent; }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--border2); }
+
+table { width: 100%; border-collapse: collapse; }
+
+thead th {
+  position: sticky; top: 0;
+  background: var(--surface2);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .12em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid rgba(30,45,61,0.5);
+  cursor: pointer;
+  transition: background .1s;
+}
+
+tbody tr:hover { background: rgba(0,212,255,0.04); }
+tbody tr.selected { background: rgba(0,212,255,0.08); border-left: 2px solid var(--accent); }
+tbody tr.new-alert { animation: flashIn .4s ease; }
+
+@keyframes flashIn {
+  0% { background: rgba(0,212,255,0.15); }
+  100% { background: transparent; }
+}
+
+tbody td {
+  padding: 7px 10px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+td.ts { color: var(--muted); white-space: nowrap; font-size: 10px; }
+td.ip  { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+td.detail { color: var(--muted); font-size: 10px; max-width: 300px; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 6px; border-radius: 2px;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--font-display);
+}
+
+.badge.CRITICAL { background: rgba(255,51,102,.15);  color: var(--crit);   border: 1px solid rgba(255,51,102,.3); }
+.badge.HIGH     { background: rgba(255,140,0,.12);   color: var(--high);   border: 1px solid rgba(255,140,0,.3); }
+.badge.MEDIUM   { background: rgba(255,214,10,.1);   color: var(--yellow); border: 1px solid rgba(255,214,10,.3); }
+.badge.LOW      { background: rgba(0,212,255,.1);    color: var(--low);    border: 1px solid rgba(0,212,255,.3); }
+
+/* ── SIDEBAR ─────────────────────────────────────────────────────────── */
+.sidebar {
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+/* Investigation panel */
+.investigation {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.inv-empty {
+  color: var(--muted); font-size: 10px;
+  text-align: center; padding: 20px 0;
+  border: 1px dashed var(--border2);
+}
+
+.inv-ip {
+  font-family: var(--font-display);
+  font-size: 16px; color: var(--accent);
+  margin-bottom: 10px;
+  text-shadow: 0 0 12px rgba(0,212,255,.4);
+}
+
+.inv-row {
+  display: flex; justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(30,45,61,0.5);
+  font-size: 10px;
+}
+
+.inv-row .key { color: var(--muted); }
+.inv-row .val { color: var(--text); font-weight: 500; text-align: right; }
+.inv-row .val.danger { color: var(--crit); }
+.inv-row .val.warn   { color: var(--high); }
+.inv-row .val.ok     { color: var(--green); }
+
+.sparkbar {
+  height: 3px; background: var(--border2);
+  margin-top: 8px; border-radius: 2px; overflow: hidden;
+}
+
+.sparkbar-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--crit));
+  transition: width .5s ease;
+}
+
+/* Top attackers */
+.top-attackers {
+  padding: 14px 16px;
+  flex: 1; overflow-y: auto;
+}
+
+.attacker-row {
+  display: flex; align-items: center;
+  gap: 8px; padding: 6px 0;
+  border-bottom: 1px solid rgba(30,45,61,0.4);
+  cursor: pointer;
+  transition: background .1s;
+}
+
+.attacker-row:hover { background: rgba(0,212,255,0.04); margin: 0 -16px; padding: 6px 16px; }
+
+.attacker-rank {
+  font-family: var(--font-display);
+  font-size: 9px; color: var(--muted); width: 16px; flex-shrink: 0;
+}
+
+.attacker-ip { color: var(--accent); font-size: 11px; flex: 1; }
+
+.attacker-bar-wrap { width: 60px; }
+
+.attacker-bar {
+  height: 3px; background: var(--border2); border-radius: 2px; overflow: hidden;
+}
+
+.attacker-bar-fill {
+  height: 100%; border-radius: 2px;
+  background: var(--crit);
+  transition: width .5s ease;
+}
+
+.attacker-count {
+  font-size: 10px; color: var(--high); width: 24px; text-align: right; flex-shrink: 0;
+}
+
+/* Rule breakdown */
+.rule-list { padding: 14px 16px; border-top: 1px solid var(--border); }
+
+.rule-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0;
+}
+
+.rule-name { flex: 1; font-size: 10px; color: var(--text); }
+
+.rule-bar-wrap { width: 50px; }
+
+.rule-bar {
+  height: 3px; background: var(--border2); border-radius: 2px; overflow: hidden;
+}
+
+.rule-bar-fill {
+  height: 100%; border-radius: 2px; background: var(--accent);
+}
+
+.rule-count { font-size: 10px; color: var(--muted); width: 24px; text-align: right; }
+
+/* ── FOOTER ──────────────────────────────────────────────────────────── */
+footer {
+  padding: 8px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--muted);
+}
+
+footer a { color: var(--accent); text-decoration: none; }
+
+/* ── DETAIL MODAL ────────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(7,11,15,.85);
+  z-index: 1000;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  padding: 24px;
+  width: 560px;
+  max-width: 95vw;
+  box-shadow: 0 0 60px rgba(0,212,255,.1);
+  animation: modalIn .2s ease;
+}
+
+@keyframes modalIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 3px; color: var(--accent);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+
+.modal-field { }
+.modal-field-label { font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
+.modal-field-value { font-size: 12px; color: var(--text); }
+.modal-field-value.mono { font-family: var(--font-mono); color: var(--accent); }
+
+.modal-payload {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 10px; color: var(--muted);
+  font-family: var(--font-mono);
+  word-break: break-all; line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.modal-close {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted); font-family: var(--font-mono);
+  font-size: 10px; padding: 6px 16px;
+  cursor: pointer; letter-spacing: 2px;
+  transition: all .2s;
+}
+
+.modal-close:hover { border-color: var(--accent); color: var(--accent); }
+
+.empty { text-align: center; padding: 40px; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- HEADER -->
+<header>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      NIDS
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--text);font-weight:500">CodeAlpha — Network Intrusion Detection System</div>
+      <div class="header-meta">Lbien Bilal &nbsp;|&nbsp; github.com/b1l4l-sec &nbsp;|&nbsp; ENSA Fes — GDNC</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span>Uptime: <strong id="hdr-uptime">00:00:00</strong></span>
+    <span>Packets: <strong id="hdr-pkts">0</strong></span>
+    <span>Alerts/min: <strong id="hdr-rate">0</strong></span>
+    <span>Refresh: 2s</span>
+    <div class="threat-level none" id="threat-badge">THREAT: NONE</div>
+  </div>
+</header>
+
+<!-- STAT CARDS -->
+<div class="stat-grid">
+  <div class="stat-card total">
+    <div class="stat-label">Total Alerts</div>
+    <div class="stat-value" id="s-total">0</div>
+    <div class="stat-sub" id="s-total-sub">no alerts fired</div>
+  </div>
+  <div class="stat-card crit">
+    <div class="stat-label">Critical</div>
+    <div class="stat-value" id="s-crit">0</div>
+    <div class="stat-sub">immediate action</div>
+  </div>
+  <div class="stat-card high">
+    <div class="stat-label">High</div>
+    <div class="stat-value" id="s-high">0</div>
+    <div class="stat-sub">investigate now</div>
+  </div>
+  <div class="stat-card medium">
+    <div class="stat-label">Medium</div>
+    <div class="stat-value" id="s-medium">0</div>
+    <div class="stat-sub">monitor closely</div>
+  </div>
+  <div class="stat-card low-c">
+    <div class="stat-label">Low</div>
+    <div class="stat-value" id="s-low">0</div>
+    <div class="stat-sub">informational</div>
+  </div>
+  <div class="stat-card packets">
+    <div class="stat-label">Packets</div>
+    <div class="stat-value" id="s-pkts">0</div>
+    <div class="stat-sub" id="s-pkts-sub">processed</div>
+  </div>
+</div>
+
+<!-- CHARTS ROW -->
+<div class="charts-row">
+  <div class="chart-panel">
+    <div class="panel-title">Severity</div>
+    <canvas id="c-severity"></canvas>
+  </div>
+  <div class="chart-panel">
+    <div class="panel-title">Alert Timeline</div>
+    <canvas id="c-timeline"></canvas>
+  </div>
+  <div class="chart-panel">
+    <div class="panel-title">Attack Types</div>
+    <canvas id="c-rules"></canvas>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main-grid">
+
+  <!-- ALERT TABLE -->
+  <div class="alerts-panel panel">
+    <div class="panel-title">Alert Log — Live Feed <span style="color:var(--green);margin-left:8px" id="alert-count-badge"></span></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Timestamp</th>
+            <th>Severity</th>
+            <th>Rule / Attack</th>
+            <th>Source IP</th>
+            <th>Destination</th>
+            <th>Protocol</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody id="alert-tbody">
+          <tr><td colspan="8" class="empty">Awaiting alerts — monitoring active...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- Investigation -->
+    <div class="investigation">
+      <div class="panel-title">IP Investigation</div>
+      <div id="inv-content">
+        <div class="inv-empty">Click an alert row to investigate source IP</div>
+      </div>
+    </div>
+
+    <!-- Top Attackers -->
+    <div class="top-attackers">
+      <div class="panel-title">Top Attackers</div>
+      <div id="attackers-list">
+        <div style="color:var(--muted);font-size:10px;text-align:center;padding:16px">No data yet</div>
+      </div>
+    </div>
+
+    <!-- Rule Breakdown -->
+    <div class="rule-list">
+      <div class="panel-title">Rule Breakdown</div>
+      <div id="rule-breakdown">
+        <div style="color:var(--muted);font-size:10px;text-align:center;padding:8px">No data yet</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <span>CodeAlpha Internship &mdash; Task 4: Network Intrusion Detection System &nbsp;|&nbsp; <a href="https://github.com/b1l4l-sec">github.com/b1l4l-sec</a> &nbsp;|&nbsp; Lbien Bilal &mdash; ENSA Fes</span>
+  <span id="footer-last-update">Last update: —</span>
+</footer>
+
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-title">ALERT DETAIL</div>
+    <div class="modal-grid" id="modal-grid"></div>
+    <div class="modal-field-label" style="margin-bottom:6px">Packet Summary</div>
+    <div class="modal-payload" id="modal-payload">—</div>
+    <button class="modal-close" onclick="document.getElementById('modal-overlay').classList.remove('open')">CLOSE [ESC]</button>
+  </div>
+</div>
+
+<script>
+// ── Chart.js defaults ──────────────────────────────────────────────────
+const COLORS = { CRITICAL:'#ff3366', HIGH:'#ff8c00', MEDIUM:'#ffd60a', LOW:'#00d4ff' };
+const grid = '#1e2d3d', muted = '#6c7a8d', text = '#cdd6f4';
+
+const chartBase = {
+  scales: {
+    x: { ticks:{color:muted,font:{size:9,family:'JetBrains Mono'}}, grid:{color:grid} },
+    y: { ticks:{color:muted,font:{size:9}}, grid:{color:grid}, beginAtZero:true }
+  },
+  plugins:{ legend:{display:false} },
+  animation:{ duration:300 }
+};
+
+const severityChart = new Chart(document.getElementById('c-severity'), {
+  type: 'doughnut',
+  data: {
+    labels: ['CRITICAL','HIGH','MEDIUM','LOW'],
+    datasets: [{ data:[0,0,0,0], backgroundColor:Object.values(COLORS), borderColor:'#070b0f', borderWidth:3 }]
+  },
+  options: {
+    cutout:'65%',
+    plugins:{
+      legend:{ position:'right', labels:{ color:text, font:{size:9,family:'JetBrains Mono'}, boxWidth:8, padding:8 } }
+    },
+    animation:{duration:300}
+  }
+});
+
+const timelineChart = new Chart(document.getElementById('c-timeline'), {
+  type:'line',
+  data:{ labels:[], datasets:[{
+    data:[], fill:true,
+    borderColor:'#00d4ff', backgroundColor:'rgba(0,212,255,.08)',
+    tension:.4, pointRadius:2, pointHoverRadius:4,
+    borderWidth:1.5,
+  }]},
+  options: chartBase,
+});
+
+const rulesChart = new Chart(document.getElementById('c-rules'), {
+  type:'bar',
+  data:{ labels:[], datasets:[{
+    data:[],
+    backgroundColor:'rgba(255,140,0,.5)',
+    borderColor:'#ff8c00', borderWidth:1,
+  }]},
+  options:{ ...chartBase, indexAxis:'y' }
+});
+
+// ── State ──────────────────────────────────────────────────────────────
+let allAlerts = [];
+let selectedIp = null;
+let alertCountHistory = [];
+let lastAlertCount = 0;
+const t0 = Date.now();
+
+// ── Threat level ───────────────────────────────────────────────────────
+function updateThreatLevel(stats) {
+  const badge = document.getElementById('threat-badge');
+  const t = stats.totals || {};
+  let level = 'none', label = 'NONE';
+  if (t.CRITICAL > 0)     { level='critical'; label='CRITICAL'; }
+  else if (t.HIGH > 5)    { level='high';     label='HIGH'; }
+  else if (t.MEDIUM > 0)  { level='medium';   label='ELEVATED'; }
+  else if (t.total > 0)   { level='low';      label='LOW'; }
+  badge.className = `threat-level ${level}`;
+  badge.textContent = `THREAT: ${label}`;
+}
+
+// ── Investigation panel ────────────────────────────────────────────────
+function investigate(ip) {
+  selectedIp = ip;
+  const ipAlerts = allAlerts.filter(a => a.src_ip === ip);
+  const rules = {};
+  ipAlerts.forEach(a => rules[a.rule] = (rules[a.rule]||0)+1);
+  const topRule = Object.entries(rules).sort((a,b)=>b[1]-a[1])[0];
+  const severities = ipAlerts.map(a=>a.severity);
+  const worstSev = severities.includes('CRITICAL') ? 'CRITICAL'
+    : severities.includes('HIGH') ? 'HIGH'
+    : severities.includes('MEDIUM') ? 'MEDIUM' : 'LOW';
+  const last = ipAlerts[ipAlerts.length-1];
+
+  const sevClass = worstSev === 'CRITICAL' ? 'danger' : worstSev === 'HIGH' ? 'warn' : 'ok';
+
+  document.getElementById('inv-content').innerHTML = `
+    <div class="inv-ip">${ip}</div>
+    <div class="inv-row"><span class="key">Total Alerts</span><span class="val ${sevClass}">${ipAlerts.length}</span></div>
+    <div class="inv-row"><span class="key">Worst Severity</span><span class="val ${sevClass}">${worstSev}</span></div>
+    <div class="inv-row"><span class="key">Top Attack</span><span class="val">${topRule ? topRule[0] : '—'}</span></div>
+    <div class="inv-row"><span class="key">Attack Types</span><span class="val">${Object.keys(rules).length}</span></div>
+    <div class="inv-row"><span class="key">Last Seen</span><span class="val">${last ? last.timestamp.slice(11) : '—'}</span></div>
+    <div class="inv-row"><span class="key">Destination</span><span class="val">${last ? last.dst_ip : '—'}</span></div>
+    <div class="sparkbar"><div class="sparkbar-fill" style="width:${Math.min(100, ipAlerts.length * 5)}%"></div></div>
+  `;
+
+  // highlight table rows
+  document.querySelectorAll('tbody tr').forEach(tr => {
+    tr.classList.toggle('selected', tr.dataset.srcIp === ip);
+  });
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────
+function openModal(alert) {
+  const grid = document.getElementById('modal-grid');
+  const fields = [
+    ['Timestamp', alert.timestamp, false],
+    ['Severity',  alert.severity,  false],
+    ['Rule',      alert.rule,      false],
+    ['Protocol',  alert.proto,     false],
+    ['Source IP', alert.src_ip,    true],
+    ['Destination', alert.dst_ip,  true],
+  ];
+  grid.innerHTML = fields.map(([k,v,mono]) => `
+    <div class="modal-field">
+      <div class="modal-field-label">${k}</div>
+      <div class="modal-field-value ${mono?'mono':''}">${v||'—'}</div>
+    </div>
+  `).join('');
+  grid.innerHTML += `<div class="modal-field" style="grid-column:1/-1">
+    <div class="modal-field-label">Detail</div>
+    <div class="modal-field-value">${alert.detail}</div>
+  </div>`;
+  document.getElementById('modal-payload').textContent = alert.pkt_summary || '(no packet summary available)';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modal-overlay'))
+    document.getElementById('modal-overlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('modal-overlay').classList.remove('open');
+});
+
+// ── Main refresh ───────────────────────────────────────────────────────
+async function refresh() {
+  try {
+    const [ar, sr] = await Promise.all([fetch('/api/alerts'), fetch('/api/stats')]);
+    const alerts = await ar.json();
+    const stats  = await sr.json();
+    const t = stats.totals || {};
+
+    // Stat cards
+    document.getElementById('s-total').textContent  = t.total    || 0;
+    document.getElementById('s-crit').textContent   = t.CRITICAL || 0;
+    document.getElementById('s-high').textContent   = t.HIGH     || 0;
+    document.getElementById('s-medium').textContent = t.MEDIUM   || 0;
+    document.getElementById('s-low').textContent    = t.LOW      || 0;
+    document.getElementById('s-pkts').textContent   = (t.pkt_count||0).toLocaleString();
+    document.getElementById('hdr-pkts').textContent = (t.pkt_count||0).toLocaleString();
+
+    // Alert rate
+    const newCount = t.total || 0;
+    const rate = Math.max(0, newCount - lastAlertCount);
+    document.getElementById('hdr-rate').textContent = rate;
+    lastAlertCount = newCount;
+
+    if (newCount > 0) {
+      document.getElementById('s-total-sub').textContent = `+${rate} in last 2s`;
+    }
+
+    updateThreatLevel(stats);
+
+    // Severity donut
+    severityChart.data.datasets[0].data = [t.CRITICAL||0, t.HIGH||0, t.MEDIUM||0, t.LOW||0];
+    severityChart.update('none');
+
+    // Timeline
+    const tl = stats.timeline || {};
+    timelineChart.data.labels = Object.keys(tl);
+    timelineChart.data.datasets[0].data = Object.values(tl);
+    timelineChart.update('none');
+
+    // Rules chart
+    const rules = Object.entries(stats.rules||{}).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    rulesChart.data.labels = rules.map(r=>r[0]);
+    rulesChart.data.datasets[0].data = rules.map(r=>r[1]);
+    rulesChart.update('none');
+
+    // Top attackers
+    const ips = stats.top_ips || [];
+    const maxIp = ips.length ? ips[0][1] : 1;
+    document.getElementById('attackers-list').innerHTML = ips.length
+      ? ips.map(([ip, cnt], i) => `
+        <div class="attacker-row" onclick="investigate('${ip}')">
+          <div class="attacker-rank">${i+1}</div>
+          <div class="attacker-ip">${ip}</div>
+          <div class="attacker-bar-wrap">
+            <div class="attacker-bar">
+              <div class="attacker-bar-fill" style="width:${(cnt/maxIp*100).toFixed(0)}%"></div>
+            </div>
+          </div>
+          <div class="attacker-count">${cnt}</div>
+        </div>
+      `).join('')
+      : '<div style="color:var(--muted);font-size:10px;text-align:center;padding:16px">No data yet</div>';
+
+    // Rule breakdown sidebar
+    const maxRule = rules.length ? rules[0][1] : 1;
+    document.getElementById('rule-breakdown').innerHTML = rules.length
+      ? rules.map(([rule, cnt]) => `
+        <div class="rule-row">
+          <div class="rule-name">${rule}</div>
+          <div class="rule-bar-wrap">
+            <div class="rule-bar">
+              <div class="rule-bar-fill" style="width:${(cnt/maxRule*100).toFixed(0)}%"></div>
+            </div>
+          </div>
+          <div class="rule-count">${cnt}</div>
+        </div>
+      `).join('')
+      : '<div style="color:var(--muted);font-size:10px;text-align:center;padding:8px">No data yet</div>';
+
+    // Alert table
+    allAlerts = alerts;
+    const tbody = document.getElementById('alert-tbody');
+    const prevCount = tbody.querySelectorAll('tr[data-idx]').length;
+
+    if (!alerts.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">Awaiting alerts — monitoring active...</td></tr>';
+      return;
+    }
+
+    document.getElementById('alert-count-badge').textContent = `[${alerts.length}]`;
+
+    const rows = alerts.slice().reverse().slice(0, 100);
+    tbody.innerHTML = rows.map((a, i) => `
+      <tr data-idx="${i}" data-src-ip="${a.src_ip}"
+          class="${i < (alerts.length - prevCount) && prevCount > 0 ? 'new-alert' : ''} ${selectedIp === a.src_ip ? 'selected' : ''}"
+          onclick="handleRow(this, ${JSON.stringify(a).replace(/"/g,'&quot;')})">
+        <td style="color:var(--muted);font-size:9px">${alerts.length - i}</td>
+        <td class="ts">${a.timestamp.slice(11)}</td>
+        <td><span class="badge ${a.severity}">${a.severity}</span></td>
+        <td style="font-weight:500">${a.rule}</td>
+        <td class="ip">${a.src_ip}</td>
+        <td class="ip" style="color:var(--muted)">${a.dst_ip}</td>
+        <td style="color:var(--purple)">${a.proto}</td>
+        <td class="detail">${a.detail}</td>
+      </tr>
+    `).join('');
+
+    document.getElementById('footer-last-update').textContent =
+      'Last update: ' + new Date().toLocaleTimeString();
+
+  } catch(e) { console.error(e); }
+}
+
+function handleRow(tr, alert) {
+  investigate(alert.src_ip);
+  // Double click opens modal
+  if (tr.dataset.clicked) {
+    openModal(alert);
+    delete tr.dataset.clicked;
+  } else {
+    tr.dataset.clicked = '1';
+    setTimeout(() => delete tr.dataset.clicked, 400);
+  }
+}
+
+// ── Uptime ─────────────────────────────────────────────────────────────
+setInterval(() => {
+  const s = Math.floor((Date.now()-t0)/1000);
+  const h = String(Math.floor(s/3600)).padStart(2,'0');
+  const m = String(Math.floor((s%3600)/60)).padStart(2,'0');
+  const sc = String(s%60).padStart(2,'0');
+  document.getElementById('hdr-uptime').textContent = `${h}:${m}:${sc}`;
+}, 1000);
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
