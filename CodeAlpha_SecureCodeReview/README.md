@@ -1,7 +1,20 @@
 # CodeAlpha Secure Coding Review — Task 3
 
-CodeAlpha Cybersecurity Internship — Task 3: Secure Coding Review  
+CodeAlpha Cybersecurity Internship — Task 3: Secure Coding Review
 Author: LBIEN Bilal | github.com/b1l4l-sec
+
+---
+
+## Screenshots
+
+### Vulnerable App — SQL Injection Active
+![Vulnerable App](secureapp%20review.png)
+
+### Secure App — Patched Version
+![Secure App Patched](secureapp%20patched.png)
+
+### Bandit Static Analysis Results
+![Bandit Results](bandit%20results.png)
 
 ---
 
@@ -35,6 +48,7 @@ A deliberately vulnerable Python Flask web application was built, audited using 
     |   |-- app.py          # Fully remediated secure version
     |   |-- secure_uploads/ # Sanitized upload directory
     |-- AUDIT_REPORT.md     # Full audit report with exploits and fixes
+    |-- audit_report.txt    # Bandit raw output
     |-- README.md
 
 ---
@@ -75,6 +89,5 @@ The vulnerable application must never be deployed on a public or production netw
 
 ---
 
-*CodeAlpha Cybersecurity Internship — Task 3: Secure Coding Review*  
+*CodeAlpha Cybersecurity Internship — Task 3: Secure Coding Review*
 *LBIEN Bilal | ENSA Fes | github.com/b1l4l-sec*
-
