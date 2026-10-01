@@ -3,11 +3,11 @@
 **Intern:** LBIEN Bilal | github.com/b1l4l-sec | ENSA Fes — GDNC
 **Student ID:** CA/DF1/55893
 **Domain:** Cyber Security
-**Duration:** 1st May 2026 — 30th May 2026
+**Duration:** 1st May 2026 - 30th May 2026
 
 ---
 
-## Completed Tasks
+## Completed Tasks :)
 
 ### Task 1 — Basic Network Sniffer
 **Folder:** `CodeAlpha_NetworkSniffer/`
