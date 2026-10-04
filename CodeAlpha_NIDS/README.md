@@ -1,7 +1,7 @@
 # CodeAlpha NIDS — Task 4: Network Intrusion Detection System
 
 CodeAlpha Cybersecurity Internship — Task 4  
-Author: LBIEN Bilal | github.com/b1l4l-sec | ENSA Fes — GDNC
+Author: LBIEN Bilal | github.com/b1l4l-sec | ENSA Fes, GDNC
 
 ---
 
