@@ -7,7 +7,7 @@
 
 ---
 
-## Completed Tasks :)
+## Completed Tasks
 
 ### Task 1 — Basic Network Sniffer
 **Folder:** `CodeAlpha_NetworkSniffer/`
